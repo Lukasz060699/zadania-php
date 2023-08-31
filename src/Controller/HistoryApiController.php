@@ -7,6 +7,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Tools\Pagination\Paginator;
 use FOS\RestBundle\Controller\AbstractFOSRestController;
 use FOS\RestBundle\Controller\Annotations as Rest;
 
@@ -59,32 +60,53 @@ class HistoryApiController extends AbstractFOSRestController
 
     //obsluga requesta GET dla "/exchange/values"
     #[Route('/exchange/values', methods: ['GET'])]
-    public function getHistoryAction(): Response
+    public function getHistoryAction(Request $request): Response
     {
+        $page = $request->query->getInt('page', 1);
+
+        //domyslnie sortowane wedlug daty stworzenia
+        $sort = $request->query->get('sort', 'created_at');
+
+        //doymslnie sortowane w porzadku malejacym
+        $order = $request->query->get('order', 'DESC');
+
         //pobieranie wszystkich rekordow z bazy danych
         $repository = $this->entityManager->getRepository(History::class);
-        $records = $repository->findAll();
 
-        //sprawdzenie czy sa jakiekolwiek rekordy
-        if (empty($records)) {
-            return $this->handleView($this->view(['message' => 'No records found'], Response::HTTP_NOT_FOUND));
-        }
+        $queryBuilder = $repository->createQueryBuilder('h')
+            ->orderBy('h.' . $sort, $order);
+
+        $query = $queryBuilder->getQuery();
+        $query->getFirstResult(($page - 1) * 10);
+        $query->setMaxResults(10);
+
+        $paginator = new Paginator($query);
+
+        $totalItems = count($paginator);
+        $pagesCount = ceil($totalItems / 10);
 
         //konwersja rekordow na format ktory mozna zwrocic
         $data = [];
-        foreach ($records as $record) {
+        foreach ($paginator as $record) {
             $data[] = [
                 'id' => $record->getId(),
                 'firstIn' => $record->getFirstIn(),
                 'secondIn' => $record->getSecondIn(),
                 'firstOut' => $record->getFirstOut(),
                 'secondOut' => $record->getSecondOut(),
-                'createdAt' => $record->getCreatedAt(),
-                'updatedAt' => $record->getUpdatedAt(),
+                'created_at' => $record->getCreatedAt(),
+                'updated_at' => $record->getUpdatedAt(),
             ];
         }
 
-        return $this->handleView($this->view($data, Response::HTTP_OK));
+        return $this->handleView(
+                $this->view([
+                'totalItems' => $totalItems,
+                'page' => $page,
+                'pageCount' => $pagesCount,
+                'items' => $data
+            ], Response::HTTP_OK)
+        );
     }
 
     //oblsuga requesta PUR dla "/exchange/values/{id}"
