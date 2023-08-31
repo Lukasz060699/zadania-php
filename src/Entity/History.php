@@ -14,7 +14,7 @@ class History
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column]
+    #[ORM\Column(nullable: true)]
     private ?int $firstIn = null;
 
     #[ORM\Column(nullable: true)]
